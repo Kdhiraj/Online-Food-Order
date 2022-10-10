@@ -12,8 +12,16 @@ export class FoodRepository {
   }
   async getFoods(vendorId: string) {
     try {
-      const foods = await FoodModel.find({vendorId});
+      const foods = await FoodModel.find({ vendorId });
       return foods;
+    } catch (error) {
+      throw error;
+    }
+  }
+  async findFoodById(foodId: string) {
+    try {
+      const food = await FoodModel.findOne({ _id: foodId });
+      return food;
     } catch (error) {
       throw error;
     }

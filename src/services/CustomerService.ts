@@ -1,18 +1,28 @@
-import { BadRequestError } from "./../errors/bad-request-error";
-import { CustomerDoc, CustomerRepository } from "../database";
+import {
+  CustomerDoc,
+  CustomerRepository,
+  OfferRepository,
+  TransactionRepository,
+} from "../database";
 import { GenerateOtp, onRequestOTP, Password } from "../utility";
 import {
+  CartItem,
   CreateCustomerInput,
   CustomerPayload,
   EditCustomerProfileInput,
   UserLoginInput,
+  CreatePaymentInput,
 } from "../dto";
-import { NotFoundError } from "../errors";
+import { NotFoundError, BadRequestError } from "../errors";
+import { foodService } from "./FoodService";
+import { txnService } from "./TransactionService";
 
 class CustomerService {
   private customerRepository;
+  private offerRepository;
   constructor() {
     this.customerRepository = new CustomerRepository();
+    this.offerRepository = new OfferRepository();
   }
 
   async customerSignup(data: CreateCustomerInput) {
@@ -161,6 +171,7 @@ class CustomerService {
       throw error;
     }
   }
+
   async editProfile(customerId: string, data: EditCustomerProfileInput) {
     try {
       const { firstName, lastName, address } = data;
@@ -176,6 +187,147 @@ class CustomerService {
       const updatedCustomerResponse = await customer.save();
 
       return updatedCustomerResponse;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async myOrders(customerId: string) {
+    try {
+      const customer = await this.customerRepository.findCustomerById(
+        customerId
+      );
+      if (!customer) {
+        throw new NotFoundError("Customer not found");
+      }
+      const orders = await this.customerRepository.customerOrders(customer._id);
+      return orders;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /*-----------------Cart Service ------------------------- */
+
+  async addToCart(data: CartItem, customerId: string) {
+    try {
+      const { _id, unit } = data;
+      let cartItems = Array();
+      const customer = await this.customerProfile(customerId);
+      const food = await foodService.foodDetails(_id);
+      if (food) {
+        if (customer) {
+          //check for cart items
+          cartItems = customer.cart!;
+
+          if (cartItems.length > 0) {
+            // check and update unit
+            let existFoodItems = cartItems.filter(
+              (item) => item.food._id.toString() === _id
+            );
+            if (existFoodItems.length > 0) {
+              const index = cartItems.indexOf(existFoodItems[0]);
+
+              if (unit > 0) {
+                // At index add cart item
+                cartItems[index] = { food, unit };
+              } else {
+                // At index remove cart item
+                cartItems.splice(index, 1);
+              }
+            } else {
+              cartItems.push({ food, unit });
+            }
+          } else {
+            // add item to cart
+            cartItems.push({ food, unit });
+          }
+          if (cartItems) {
+            customer.cart = cartItems as any;
+            const cartResult = await customer.save();
+            return cartResult.cart;
+          }
+        }
+      }
+      return;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async cartItems(customerId: string) {
+    try {
+      const customer = await this.customerProfile(customerId);
+      const cartItems = await this.customerRepository.cartItems(customer._id);
+      return cartItems;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async removeFromCart(customerId: string) {
+    try {
+      const customer = await this.customerProfile(customerId);
+      const cartItems = await this.customerRepository.cartItems(customer._id);
+      if (cartItems.length === 0) {
+        throw new BadRequestError("Cart is already Empty");
+      } else {
+        customer.cart = [] as any;
+        const cartResult = await customer.save();
+        return cartResult;
+      }
+    } catch (error) {
+      throw error;
+    }
+  }
+  /* ---------------------------- Offer ------------------------*/
+
+  async verifyOffer(offerId: string, customerId: string) {
+    try {
+      const customer = await this.customerProfile(customerId);
+      const appliedOffer = await this.offerRepository.findOfferById(offerId);
+      if (!appliedOffer) {
+        throw new BadRequestError("Offer in not valid");
+      } else {
+        return appliedOffer;
+      }
+    } catch (error) {
+      throw error;
+    }
+  }
+  /* ---------------------------- Payment ------------------------*/
+
+  async payment(customerId: string, data: CreatePaymentInput) {
+    try {
+      const { amount, paymentMode, offerId } = data;
+      let payableAmount = Number(amount);
+
+      const customer = await this.customerProfile(customerId);
+
+      if (offerId) {
+        const appliedOffer = await this.offerRepository.findOfferById(offerId);
+        if (!appliedOffer) {
+          throw new BadRequestError("Offer in not valid");
+        }
+        if (appliedOffer.isActive) {
+          payableAmount = payableAmount - appliedOffer.offerAmount;
+        }
+      }
+      // perform payment gateway charge api
+      
+      // create record on transaction
+      const txnInput = {
+        customer: customer._id,
+        vendorId: "",
+        orderId: "",
+        orderValue: payableAmount,
+        offerUsed: offerId || "NA",
+        status: "OPEN", //OPEN /FAILED / SUCCESS come from payment gateway
+        paymentMode: paymentMode,
+        paymentResponse: "Payment is cash on Delivery",
+      };
+      const transaction = await txnService.createTransaction(txnInput);
+      return transaction;
     } catch (error) {
       throw error;
     }

@@ -1,10 +1,8 @@
 import { CreateVendorInput } from "../dto/Vendor.dto";
 import { Request, Response, NextFunction } from "express";
-import { vendorService } from "../services";
+import { vendorService, txnService, deliveryService } from "../services";
 import { asyncHandler } from "../utility";
 import { Pagination } from "../dto";
-
-
 
 export const createVendors = asyncHandler(
   async (req: Request, res: Response, next: NextFunction) => {
@@ -31,7 +29,52 @@ export const getVendors = asyncHandler(
 export const getVendorById = asyncHandler(
   async (req: Request, res: Response, next: NextFunction) => {
     const vendorId = req.params.id;
-    const vendor = await vendorService.getVendor(vendorId);
+    const vendor = await vendorService.viewVendor(vendorId);
     res.json(vendor);
+  }
+);
+/* -------------------------------- Transaction -------------------------*/
+export const GetTransactions = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const transactions = await txnService.getAllTransaction();
+    res.json(transactions);
+  }
+);
+
+export const GetTransactionById = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const txnId = req.params.id;
+    if (txnId) {
+      const transaction = await txnService.viewTransactionDetails(txnId);
+      res.json(transaction);
+    }
+  }
+);
+
+/* -------------------------------Delivery User ------------------------*/
+
+export const VerifyDeliveryUser = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const { _id, status } = req.body;
+
+    if (_id) {
+      const profile = await deliveryService.viewDeliveryUserProfile(_id);
+
+      if (profile) {
+        profile.verified = status;
+        const result = await profile.save();
+
+        return res.status(200).json(result);
+      }
+    }
+
+    return res.json({ message: "Unable to verify Delivery User" });
+  }
+);
+
+export const GetDeliveryUsers = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const deliveryUsers = await deliveryService.getDeliveryUsers();
+    res.json(deliveryUsers);
   }
 );

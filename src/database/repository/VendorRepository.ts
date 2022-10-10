@@ -41,19 +41,7 @@ export class VendorRepository {
       throw error;
     }
   }
-  async updateVendor(query: any) {
-    try {
-      const { filter, updateData, option } = query;
-      const vendor = await VendorModel.findOneAndUpdate(
-        filter,
-        updateData,
-        option
-      );
-      return vendor;
-    } catch (error) {
-      throw error;
-    }
-  }
+ 
   async getVendorFoods(query: any, orderBy?: any, limit?: number) {
     try {
       let foods = VendorModel.find(query).populate({ path: "foods" });

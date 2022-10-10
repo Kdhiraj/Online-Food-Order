@@ -3,12 +3,6 @@ export interface CreateCustomerInput {
   phone: string;
   password: string;
 }
-
-export interface UserLoginInput {
-  email: string;
-  password: string;
-}
-
 export interface EditCustomerProfileInput {
   firstName: string;
   lastName: string;
@@ -32,12 +26,19 @@ export interface OrderInputs {
   items: [CartItem];
 }
 
-export interface CreateDeliveryUserInput {
-  email: string;
-  phone: string;
-  password: string;
-  firstName: string;
-  lastName: string;
-  address: string;
-  pincode: string;
+
+
+export enum Payment {
+  Card = "Card",
+  COD = "COD",
+  Wallet = "Wallet",
+  NetBanking = "NetBanking",
 }
+
+export interface CreatePaymentInput {
+  amount: string;
+  paymentMode: Payment;
+  offerId?: string;
+}
+
+

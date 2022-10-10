@@ -26,4 +26,35 @@ export class CustomerRepository {
       throw error;
     }
   }
+  async customerOrders(customerId: string) {
+    try {
+      const cusotmer = await CustomerModel.findOne({
+        _id: customerId,
+      }).populate({
+        path: "orders",
+        options: { sort: { createdAt: -1 } },
+        populate: {
+          path: "items.food",
+          model: "Food",
+        },
+      });
+      return cusotmer?.orders;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async cartItems(customerId: string) {
+    try {
+      const cusotmer = await CustomerModel.findOne({
+        _id: customerId,
+      }).populate({
+        path: "cart.food",
+      });
+
+      return cusotmer?.cart || [];
+    } catch (error) {
+      throw error;
+    }
+  }
 }

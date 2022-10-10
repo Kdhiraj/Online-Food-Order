@@ -1,12 +1,21 @@
-import { FoodDoc, VendorDoc, VendorRepository } from "../database";
-import { CreateVendorInput, VendorPayload } from "../dto";
-import { BadRequestError } from "../errors";
+import { EditVendorInput, EditVendorService } from "./../dto";
+import { OfferRepository, VendorDoc, VendorRepository } from "../database";
+import {
+  CreateOfferInputs,
+  CreateVendorInput,
+  ProcessOrderInputs,
+  VendorPayload,
+} from "../dto";
+import { BadRequestError, NotFoundError } from "../errors";
 import { Password } from "../utility";
+import { orderService } from "./OrderService";
 
 class VendorService {
   private repository;
+  private offerRepository;
   constructor() {
     this.repository = new VendorRepository();
+    this.offerRepository = new OfferRepository();
   }
 
   async createVendor(data: CreateVendorInput) {
@@ -69,40 +78,39 @@ class VendorService {
     }
   }
 
-  async getAllVendors(page: number, size: number) {
-    try {
-      const limit = size;
-      const skip = page * size;
-      const vendors = await this.repository.getAllVendors(skip, limit);
-      return vendors;
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  async getVendor(vendorId: string) {
+  async updateService(vendorId: string, data: EditVendorService) {
     try {
       const vendor = await this.repository.findVendorById(vendorId);
+      const { lat, lng } = data;
       if (!vendor) {
         throw new BadRequestError("Vendor doesn't exist");
       }
+      vendor.serviceAvailable = !vendor.serviceAvailable;
+
+      if (lat && lng) {
+        vendor.lat = lat;
+        vendor.lng = lng;
+      }
+      //when service enable by vendor update his location
+      await vendor.save();
       return vendor;
     } catch (error) {
       throw error;
     }
   }
 
-  async updateVendorData(filter: any, updateData: any, option: any) {
+  async updateProfile(vendorId: string, data: EditVendorInput) {
     try {
-      const query: any = {
-        filter,
-        updateData,
-        option,
-      };
-      const vendor = await this.repository.updateVendor(query);
+      const vendor = await this.repository.findVendorById(vendorId);
+      const { name, address, phone, foodTypes } = data;
       if (!vendor) {
         throw new BadRequestError("Vendor doesn't exist");
       }
+      vendor.name = name;
+      vendor.address = address;
+      vendor.phone = phone;
+      vendor.foodTypes = foodTypes;
+      await vendor.save();
       return vendor;
     } catch (error) {
       throw error;
@@ -123,95 +131,131 @@ class VendorService {
     }
   }
 
-  async vendorAvailablInArea(pincode: string) {
+  async viewVendor(vendorId: string) {
     try {
-      const filterCriteria = {
-        pincode: pincode,
-        serviceAvailable: false,
-      };
-
-      const orderBy = {
-        rating: -1,
-      };
-
-      const foods = await this.repository.getVendorFoods(
-        filterCriteria,
-        orderBy
-      );
-      return foods;
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  async topVendorsInArea(pincode: string) {
-    try {
-      const filterCriteria = {
-        pincode: pincode,
-        serviceAvailable: false,
-      };
-
-      const orderBy = {
-        rating: -1,
-      };
-      const limit = 10;
-
-      const foods = await this.repository.getVendorFoods(
-        filterCriteria,
-        orderBy,
-        limit
-      );
-      return foods;
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  async foodAvailableIn30Min(pincode: string) {
-    try {
-      const filterCriteria = {
-        pincode: pincode,
-        serviceAvailable: false,
-      };
-      const orderBy = {
-        rating: -1,
-      };
-      const result = await this.repository.getVendorFoods(
-        filterCriteria,
-        orderBy
-      );
-      let foodResult: any = [];
-      if (result.length > 0) {
-        result.map((vendor) => {
-          const foods = vendor.foods as [FoodDoc];
-          foodResult.push(...foods.filter((food) => food.readyTime <= 30));
-        });
+      const vendor = await this.repository.findVendorById(vendorId);
+      if (!vendor) {
+        throw new BadRequestError("Vendor doesn't exist");
       }
-      return foodResult;
+      return vendor;
     } catch (error) {
       throw error;
     }
   }
 
-  async searchFoodsInArea(pincode: string) {
+  async getAllVendors(page: number, size: number) {
     try {
-      const filterCriteria = {
-        pincode: pincode,
-        serviceAvailable: false,
-      };
-      const orderBy = {
-        rating: -1,
-      };
+      const limit = size;
+      const skip = page * size;
+      const vendors = await this.repository.getAllVendors(skip, limit);
+      return vendors;
+    } catch (error) {
+      throw error;
+    }
+  }
 
-      const result = await this.repository.getVendorFoods(
-        filterCriteria,
-        orderBy
-      );
-      let foodResult: any = [];
-      if (result.length > 0) {
-        result.map((item) => foodResult.push(...item.foods));
+  /*------------------------- Offer Service ----------------------- */
+  async addOffer(vendorId: string, offerData: CreateOfferInputs) {
+    try {
+      const vendor = await this.viewVendor(vendorId);
+      if (vendor) {
+        offerData.vendors = [vendor];
+        const data = await this.offerRepository.addOffer(offerData);
+        return data;
       }
-      return foodResult;
+    } catch (error) {
+      throw error;
+    }
+  }
+  async getCurrentOffers(vendorId: string) {
+    try {
+      const vendor = await this.viewVendor(vendorId);
+      let currentOffers = Array();
+      if (vendor) {
+        const offers = await this.offerRepository.getAllOffers();
+
+        if (offers.length > 0) {
+          offers.map((item) => {
+            if (item.vendors) {
+              item.vendors.map((vendor) => {
+                if (vendor._id.toString() === vendorId) {
+                  currentOffers.push(item);
+                }
+              });
+            }
+
+            if (item.offerType === "GENERIC") {
+              currentOffers.push(item);
+            }
+          });
+        }
+      }
+      return currentOffers;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async updateOfferDetails(
+    vendorId: string,
+    offerId: string,
+    data: CreateOfferInputs
+  ) {
+    try {
+      const vendor = await this.viewVendor(vendorId);
+
+      const {
+        title,
+        description,
+        offerType,
+        offerAmount,
+        pincode,
+        promoType,
+        startValidity,
+        endValidity,
+        bank,
+        isActive,
+        minValue,
+      } = data;
+      if (vendor) {
+        const currentOffer = await this.offerRepository.findOfferById(offerId);
+        if (currentOffer) {
+          currentOffer.title = title;
+          currentOffer.description = description;
+          currentOffer.offerType = offerType;
+          currentOffer.offerAmount = offerAmount;
+          currentOffer.pincode = pincode;
+          currentOffer.promoType = promoType;
+          currentOffer.startValidity = startValidity;
+          currentOffer.endValidity = endValidity;
+          currentOffer.bank = bank;
+          currentOffer.isActive = isActive;
+          currentOffer.minValue = minValue;
+
+          const result = await currentOffer.save();
+          return result;
+        } else {
+          throw new NotFoundError("Offer not found");
+        }
+      }
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /*------------------------------------Order Section ------------------------ */
+  async processCurrentOrder(orderId: string, data: ProcessOrderInputs) {
+    try {
+      const { status, remarks, time } = data as ProcessOrderInputs; //ACCEPT, REJECT, FAILED, UNDER_PROCESS;
+      const order = await orderService.getOrderDetails(orderId);
+
+      order.orderStatus = status;
+      order.remarks = remarks;
+      if (time) {
+        order.readyTime = time;
+      }
+      const orderResult = await order.save();
+      return orderResult;
     } catch (error) {
       throw error;
     }

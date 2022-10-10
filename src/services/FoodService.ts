@@ -56,7 +56,19 @@ class FoodService {
       throw error;
     }
   }
+  
+  async foodDetails(foodId: string) {
+    try {
+      const food = await this.foodRepository.findFoodById(foodId);
+      if (!food) {
+        throw new BadRequestError("Food not found");
+      }
 
+      return food;
+    } catch (error) {
+      throw error;
+    }
+  }
 }
 
 export const foodService = new FoodService();
